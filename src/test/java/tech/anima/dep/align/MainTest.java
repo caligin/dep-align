@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import org.junit.Test;
-import tech.anima.tinytypes.StringTinyType;
 import tech.anima.tinytypes.jackson.TinyTypesModule;
 
 public class MainTest {
@@ -30,13 +29,13 @@ public class MainTest {
     public void bah() throws MalformedURLException, JsonProcessingException, IOException {
         PomDeserializer pd = new XStreamPomDeserializer();
 // probably want to resolve whole tree as seeing conflicts of declared dep on common framework might be interesting
-        List<Pair<Coordinates, List<Coordinates>>> collect = Stream.of(
+        List<Pair<Coordinate, List<Coordinate>>> collect = Stream.of(
                 new Pair<>(new GroupId("tech.anima"), new ArtifactId("tinytypes")),
                 new Pair<>(new GroupId("tech.anima"), new ArtifactId("tinytypes-jersey")),
                 new Pair<>(new GroupId("tech.anima"), new ArtifactId("jackson-datatype-tinytypes")),
                 new Pair<>(new GroupId("tech.anima"), new ArtifactId("tinytypes-testing")),
                 new Pair<>(new GroupId("tech.anima"), new ArtifactId("tinytypes-meta")))
-                .map(ga -> new Coordinates(ga.fst, ga.snd, discovermostRecentlyDeployedVersion(ga.fst, ga.snd)))
+                .map(ga -> new Coordinate(ga.fst, ga.snd, discovermostRecentlyDeployedVersion(ga.fst, ga.snd)))
                 .map(a -> new Pair<>(a, compileDependenciesFor(pd, a)))
                 .collect(Collectors.toList());
         final String dependencies = new ObjectMapper().registerModule(new TinyTypesModule()).writeValueAsString(collect);
@@ -65,27 +64,6 @@ public class MainTest {
 
     }
 
-    public static class ArtifactId extends StringTinyType {
-
-        public ArtifactId(String value) {
-            super(value);
-        }
-    }
-
-    public static class GroupId extends StringTinyType {
-
-        public GroupId(String value) {
-            super(value);
-        }
-    }
-
-    public static class Version extends StringTinyType {
-
-        public Version(String value) {
-            super(value);
-        }
-    }
-
     public static Version discovermostRecentlyDeployedVersion(GroupId g, ArtifactId a) {
         final String query = String.format("http://search.maven.org/solrsearch/select?q=g:%%22%s%%22+AND+a:%%22%s%%22&core=gav&rows=20&wt=json", g.value, a.value);
         ObjectMapper objectMapper = new ObjectMapper();
@@ -99,30 +77,17 @@ public class MainTest {
                 .get();
     }
 
-    private static List<Coordinates> compileDependenciesFor(PomDeserializer pd, Coordinates artifact) {
+    private static List<Coordinate> compileDependenciesFor(PomDeserializer pd, Coordinate artifact) {
         URL url = Softening.url(String.format("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", artifact.groupId.value.replace(".", "/"), artifact.artifactId.value, artifact.version.value, artifact.artifactId.value, artifact.version.value));
         Project unmarshal = pd.deserializeFromUrl(url);
 
         /// waaahhhh, version might not be there if specified in dependencyManagement!!! must resolve effective pom... /cry
         return unmarshal.dependencies.stream()
                 .filter(d -> d.scope == null || "compile".equals(d.scope))
-                .map(d -> new Coordinates(new GroupId(d.groupId), new ArtifactId(d.artifactId), new Version(d.version)))
+                .map(d -> new Coordinate(new GroupId(d.groupId), new ArtifactId(d.artifactId), new Version(d.version)))
                 .collect(Collectors.toList());
 
     }
 
-    public static class Coordinates {
-
-        public final GroupId groupId;
-        public final ArtifactId artifactId;
-        public final Version version;
-
-        public Coordinates(GroupId groupId, ArtifactId artifactId, Version version) {
-            this.groupId = groupId;
-            this.artifactId = artifactId;
-            this.version = version;
-        }
-
-    }
 
 }
